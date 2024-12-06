@@ -1,33 +1,117 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   Box,
   Container,
   Typography,
   TextField,
-  Card,
-  CardContent,
   Button,
   List,
   ListItem,
-  Divider,
+  Card,
+  CardContent,
   Grid,
 } from "@mui/material";
 
-const fakeStocks = [
-  { name: "Stock A", price: 100 },
-  { name: "Stock B", price: 150 },
-  { name: "Stock C", price: 75 },
-  { name: "Stock D", price: 200 },
+const initialStocks = [
+  { name: "Stock A", price: 100, symbol: "A" },
+  { name: "Stock B", price: 150, symbol: "B" },
+  { name: "Stock C", price: 75, symbol: "C" },
+  { name: "Stock D", price: 200, symbol: "D" },
 ];
 
 function App() {
+  const [stocks, setStocks] = useState(initialStocks);
   const [selectedStock, setSelectedStock] = useState(null);
-  const [investments, setInvestments] = useState([]);
+  const [userBalance, setUserBalance] = useState(10000); // Default balance
+  const [portfolio, setPortfolio] = useState([]);
   const [searchTerm, setSearchTerm] = useState("");
+
+  // Simulate stock price changes every 3 seconds
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setStocks((prevStocks) =>
+        prevStocks.map((stock) => {
+          const newPrice = Math.max(1, stock.price + (Math.random() - 0.5) * 10);
+          return { ...stock, price: newPrice }; // Update stock price
+        })
+      );
+    }, 3000);
+    return () => clearInterval(interval);
+  }, []);
+
+  // Update the selected stock dynamically when prices change
+  useEffect(() => {
+    if (selectedStock) {
+      const updatedStock = stocks.find(
+        (stock) => stock.name === selectedStock.name
+      );
+      setSelectedStock(updatedStock);
+    }
+  }, [stocks, selectedStock]);
 
   const handleBuyStock = () => {
     if (!selectedStock) return;
-    setInvestments((prev) => [...prev, selectedStock]);
+    if (userBalance >= selectedStock.price) {
+      setUserBalance(userBalance - selectedStock.price);
+      setPortfolio((prev) => {
+        const existingStock = prev.find((item) => item.name === selectedStock.name);
+        if (existingStock) {
+          return prev.map((item) =>
+            item.name === selectedStock.name
+              ? {
+                  ...item,
+                  quantity: item.quantity + 1,
+                  totalInvested: item.totalInvested + selectedStock.price,
+                  averagePrice:
+                    (item.totalInvested + selectedStock.price) /
+                    (item.quantity + 1),
+                }
+              : item
+          );
+        }
+        return [
+          ...prev,
+          {
+            ...selectedStock,
+            quantity: 1,
+            totalInvested: selectedStock.price,
+            averagePrice: selectedStock.price,
+          },
+        ];
+      });
+    } else {
+      alert("Not enough balance to buy this stock!");
+    }
+  };
+
+  const handleSellStock = (stockToSell) => {
+    const currentStock = stocks.find((s) => s.name === stockToSell.name); // Get the current price
+    if (!currentStock) return;
+
+    if (stockToSell.quantity > 0) {
+      const currentPrice = currentStock.price;
+
+      setUserBalance(userBalance + currentPrice); // Add the current price to balance
+      setPortfolio((prev) =>
+        prev
+          .map((item) =>
+            item.name === stockToSell.name
+              ? {
+                  ...item,
+                  quantity: item.quantity - 1,
+                  totalInvested: item.totalInvested - item.averagePrice, // Reduce invested amount
+                }
+              : item
+          )
+          .filter((item) => item.quantity > 0) // Remove stocks with zero quantity
+      );
+    } else {
+      alert("You don't own enough of this stock to sell!");
+    }
+  };
+
+  const calculatePercentageChange = (currentPrice, purchasePrice) => {
+    return ((currentPrice - purchasePrice) / purchasePrice) * 100;
   };
 
   return (
@@ -35,8 +119,12 @@ function App() {
       <Typography variant="h4" color="primary" align="center" gutterBottom>
         InvestTest
       </Typography>
+      <Typography variant="h6" align="center">
+        Balance: ${userBalance.toFixed(2)}
+      </Typography>
+
       <Grid container spacing={2}>
-        {/* Left Sidebar - Stocks */}
+        {/* Stocks List */}
         <Grid item xs={12} md={4}>
           <Typography variant="h5" gutterBottom>
             Stocks
@@ -50,7 +138,7 @@ function App() {
             margin="normal"
           />
           <List>
-            {fakeStocks
+            {stocks
               .filter((stock) =>
                 stock.name.toLowerCase().includes(searchTerm.toLowerCase())
               )
@@ -77,7 +165,7 @@ function App() {
           </List>
         </Grid>
 
-        {/* Middle Section - Selected Stock */}
+        {/* Selected Stock */}
         <Grid item xs={12} md={4}>
           <Typography variant="h5" gutterBottom>
             Selected Stock
@@ -88,9 +176,6 @@ function App() {
                 <Typography variant="h6">{selectedStock.name}</Typography>
                 <Typography variant="body1">
                   Current Price: ${selectedStock.price.toFixed(2)}
-                </Typography>
-                <Typography variant="body2" color="textSecondary">
-                  This is a sample stock description. Invest wisely!
                 </Typography>
                 <Button
                   variant="contained"
@@ -110,42 +195,54 @@ function App() {
           )}
         </Grid>
 
-        {/* Right Sidebar - Leaderboard */}
+        {/* Portfolio */}
         <Grid item xs={12} md={4}>
           <Typography variant="h5" gutterBottom>
-            Leaderboard
+            Portfolio
           </Typography>
           <List>
-            {["Alice", "Bob", "Charlie", "Dave"].map((user, index) => (
-              <ListItem key={index}>
-                {index + 1}. {user}
-              </ListItem>
-            ))}
+            {portfolio.map((stock, index) => {
+              const currentStock = stocks.find((s) => s.name === stock.name); // Get current stock price
+              return (
+                <ListItem
+                  key={index}
+                  style={{
+                    border: "1px solid #ddd",
+                    marginBottom: "0.5rem",
+                    borderRadius: "5px",
+                  }}
+                >
+                  <Box>
+                    <Typography variant="subtitle1">
+                      {stock.name} - {stock.quantity} shares
+                    </Typography>
+                    <Typography variant="body2" color="textSecondary">
+                      Current Price: ${currentStock?.price.toFixed(2)}
+                    </Typography>
+                    <Typography variant="body2" color="textSecondary">
+                      Change:{" "}
+                      {calculatePercentageChange(
+                        currentStock?.price || stock.price,
+                        stock.averagePrice
+                      ).toFixed(2)}
+                      %
+                    </Typography>
+                    <Button
+                      variant="outlined"
+                      color="secondary"
+                      size="small"
+                      onClick={() => handleSellStock(stock)}
+                      style={{ marginTop: "0.5rem" }}
+                    >
+                      Sell
+                    </Button>
+                  </Box>
+                </ListItem>
+              );
+            })}
           </List>
         </Grid>
       </Grid>
-
-      {/* Bottom Section - Dashboard */}
-      <Divider style={{ margin: "2rem 0" }} />
-      <Typography variant="h5" gutterBottom>
-        Dashboard
-      </Typography>
-      <Box>
-        <Typography variant="subtitle1">
-          Current Profit:{" "}
-          <span style={{ color: "green" }}>
-            ${investments.reduce((total, stock) => total + stock.price, 0)}
-          </span>
-        </Typography>
-        <Typography variant="subtitle2">Your Investments:</Typography>
-        <List>
-          {investments.map((investment, index) => (
-            <ListItem key={index}>
-              {investment.name} - ${investment.price.toFixed(2)}
-            </ListItem>
-          ))}
-        </List>
-      </Box>
     </Container>
   );
 }
